@@ -35,11 +35,11 @@ This library is **opinionated** as it will try to assign '_readable_' names to t
 
 ```csharp
 SimpleObj simple = new SimpleObj(new Result<int>(12));
-bool found = simple.IsNotFound;
-Result<int> result = simple.AsResultOfInt32();
+bool notFound = simple.IsNotFound;
+Result<int> result = simple.AsResultOfInt();
 ```
 
-It even will try to detect collections and assign names like `ListOfFoo` or `DictionaryOfStringAndInt64`.
+It even will try to detect collections and assign names like `ListOfFoo` or `DictionaryOfStringAndLong`.
 
 The same is true for the lambda parameter names in the `Match` & `Switch` methods.
 For `Switch` they will get names like `forString` (or `forNone`) and for `Match` ones like `withString` (or `withNone`).

@@ -37,7 +37,7 @@ demo2.Switch(_ => { },
              _ => { });
 
 var simple = new SimpleObj(new Result<int>(12));
-var found = simple.IsNotFound;
+var notFound = simple.IsNotFound;
 var result = simple.AsResultOfInt();
 Console.WriteLine(result);
 
