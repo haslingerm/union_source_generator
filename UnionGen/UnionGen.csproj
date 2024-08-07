@@ -22,7 +22,7 @@
         <Description>A source generator for creating C# union types via a generic marker attribute.</Description>
         <PackageId>UnionGen</PackageId>
         <PackageReadmeFile>readme.md</PackageReadmeFile>
-        <PackageVersion>2.1.1</PackageVersion>
+        <PackageVersion>2.1.2</PackageVersion>
         <Authors>M. Haslinger</Authors>
         <PackageLicenseExpression>MIT</PackageLicenseExpression>
         <PackageTags>union;source generator</PackageTags>
