@@ -226,13 +226,36 @@ public sealed class UnionSourceGen : IIncrementalGenerator
             if (typeSymbol is INamedTypeSymbol { IsGenericType: true } namedTypeSymbol)
             {
                 var typeArguments = namedTypeSymbol.TypeArguments;
-                name = typeArguments.Length switch
-                       {
-                           1 => $"{name}Of{GetTypeParamName(typeArguments, 0)}",
-                           2 =>
-                               $"{name}Of{GetTypeParamName(typeArguments, 0)}And{GetTypeParamName(typeArguments, 1)}",
-                           _ => $"Generic{name}"
-                       };
+                switch (typeArguments.Length)
+                {
+                    case 1:
+                    {
+                        var typeParamName = GetTypeParamName(typeArguments, 0);
+                        if (typeParamName is not null)
+                        {
+                            name = $"{name}Of{typeParamName}";
+                        }
+
+                        break;
+                    }
+                    case 2:
+                    {
+                        var typeParam1Name = GetTypeParamName(typeArguments, 0);
+                        var typeParam2Name = GetTypeParamName(typeArguments, 1);
+                        if (typeParam1Name is not null && typeParam2Name is not null)
+                        {
+                            name = $"{name}Of{typeParam1Name}And{typeParam2Name}";
+                        }
+                        
+                        break;
+                    }
+                    default:
+                    {
+                        name = $"Generic{name}";
+
+                        break;
+                    }
+                }
             }
 
             name = SanitizeName(name, fullName);
@@ -242,9 +265,15 @@ public sealed class UnionSourceGen : IIncrementalGenerator
 
         return typeNames;
 
-        static string GetTypeParamName(ImmutableArray<ITypeSymbol> typeParameters, int index)
+        static string? GetTypeParamName(ImmutableArray<ITypeSymbol> typeParameters, int index)
         {
-            var name = typeParameters[index].Name;
+            var typeParameterSymbol = typeParameters[index];
+            if (typeParameterSymbol is not INamedTypeSymbol namedSymbol)
+            {
+                return null;
+            }
+            
+            var name = namedSymbol.Name;
             var titleCaseName = name.EnsureTitleCase();
             var adjustedName = WellKnownTypes.AdjustIfWellKnown(titleCaseName);
 

@@ -16,6 +16,9 @@ namespace UnionDemo
     
     [Union<Success<int>, Failure>]
     public readonly partial struct SuccessWithWellKnownType;
+    
+    [Union<Success<byte[]>, Failure>]
+    public readonly partial struct SuccessWithArrayType;
 }
 
 namespace MyNamespace

@@ -54,4 +54,20 @@ public sealed class UnionGeneratorSnapshotTests
         // Pass the source code to our helper and snapshot test the output
         return SnapshotTestHelper.Verify(source);
     }
+    
+    [Fact]
+    public Task GeneratesUnionStructCorrectly_ByteArraySuccess()
+    {
+        // The source code to test
+        var source = """
+                     namespace Test1;
+                     using UnionGen;
+
+                     [UnionGen.Union<Success<byte[]>, Failure>]
+                     public readonly partial struct Nested;
+                     """;
+
+        // Pass the source code to our helper and snapshot test the output
+        return SnapshotTestHelper.Verify(source);
+    }
 }
