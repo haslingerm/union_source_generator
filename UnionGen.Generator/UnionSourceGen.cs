@@ -21,6 +21,14 @@ public sealed class UnionSourceGen : IIncrementalGenerator
     private static readonly string[] attributeClasses;
     private static readonly Regex nameFromFullNameRegex = new(@"^.*\.(\D[\d\D]*)$", RegexOptions.Compiled);
 
+    // Fully-qualified with a global:: prefix so the generated code can never be broken by a
+    // consumer type that collides with a namespace we reference. Special types stay as keywords
+    // (int, string, byte[]) for readability; they cannot be shadowed anyway.
+    private static readonly SymbolDisplayFormat globalQualifiedFormat =
+        SymbolDisplayFormat.FullyQualifiedFormat
+                           .WithMiscellaneousOptions(SymbolDisplayMiscellaneousOptions.UseSpecialTypes
+                                                     | SymbolDisplayMiscellaneousOptions.EscapeKeywordIdentifiers);
+
     static UnionSourceGen()
     {
         var genNamespace = typeof(UnionSourceGen).Namespace
@@ -232,6 +240,7 @@ public sealed class UnionSourceGen : IIncrementalGenerator
         {
             var name = typeSymbol.Name;
             var fullName = typeSymbol.ToString();
+            var globalName = typeSymbol.ToDisplayString(globalQualifiedFormat);
             var isReferenceType = typeSymbol.IsReferenceType;
             var isInterface = typeSymbol.TypeKind == TypeKind.Interface;
             var isBuiltInType = typeSymbol.SpecialType != SpecialType.None;
@@ -277,7 +286,7 @@ public sealed class UnionSourceGen : IIncrementalGenerator
 
             name = SanitizeName(name, fullName);
 
-            typeNames.Add(new TypeParameter(name, fullName, isReferenceType, isInterface));
+            typeNames.Add(new TypeParameter(name, fullName, globalName, isReferenceType, isInterface));
         }
 
         return typeNames;

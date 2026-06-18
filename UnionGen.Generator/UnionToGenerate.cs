@@ -68,7 +68,7 @@ namespace UnionGen
         public const string Interface = "interface";
     }
 
-    internal sealed record TypeParameter(string Name, string FullName, bool IsReferenceType, bool IsInterface)
+    internal sealed record TypeParameter(string Name, string FullName, string GlobalName, bool IsReferenceType, bool IsInterface)
     {
         private string? _titleCaseName;
         private string? _wellKnownName;

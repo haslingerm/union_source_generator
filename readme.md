@@ -29,6 +29,8 @@ SimpleObj CreateSimple() => new NotFound();
 
 > This project is _heavily_ influenced by the great [OneOf](https://github.com/mcintyre321/OneOf) library. All credit for the original concept to its authors!
 
+> Since version 3 this project contains AI generated code
+
 ## Opinionated Naming Scheme 
 
 This library is **opinionated** as it will try to assign '_readable_' names to the properties based on the specified types:
