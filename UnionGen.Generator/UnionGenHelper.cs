@@ -103,30 +103,23 @@ internal readonly struct UnionGenHelper(UnionToGenerate union)
 
     private string GenerateTypedEquals()
     {
+        // Switch on ActualTypeIndex (not Index): Index is the shared RefTypeIndex sentinel for every
+        // reference case, so using it would make two distinct reference cases holding equal values
+        // compare equal even though Switch/Match/Is* treat them as different cases.
         var method
             = new IndentedStringBuilder(2,
                                         $"public bool Equals({union.Name} other) => {IndentedStringBuilder.NewLine}");
-        method.AppendLine($"{IndexPropertyName} == other.{IndexPropertyName}", 1);
-        method.AppendLine($"&& {IndexPropertyName} switch ", 2);
+        method.AppendLine($"{ActualTypeIndexPropertyName} == other.{ActualTypeIndexPropertyName}", 1);
+        method.AppendLine($"&& {ActualTypeIndexPropertyName} switch ", 2);
         method.AppendLine("{", 2);
 
-        var anyRefType = false;
         for (var i = 0; i < union.TypeParameters.Count; i++)
         {
             var type = union.TypeParameters[i];
-            if (type.IsReferenceType)
-            {
-                anyRefType = true;
-            }
-            else
-            {
-                method.AppendLine($"{i} => {ValueFieldNamePrefix}{i}.Equals(other.{ValueFieldNamePrefix}{i}),", 3);
-            }
-        }
-
-        if (anyRefType)
-        {
-            method.AppendLine($"{RefTypeIndex} => {RefValueFieldName}?.Equals(other.{RefValueFieldName}) ?? false,", 3);
+            method.AppendLine(type.IsReferenceType
+                                  ? $"{i} => ReferenceEquals({RefValueFieldName}, other.{RefValueFieldName}) || ({RefValueFieldName}?.Equals(other.{RefValueFieldName}) ?? false),"
+                                  : $"{i} => {ValueFieldNamePrefix}{i}.Equals(other.{ValueFieldNamePrefix}{i}),",
+                              3);
         }
 
         method.AppendLine("_ => false", 3);
@@ -221,31 +214,20 @@ internal readonly struct UnionGenHelper(UnionToGenerate union)
     {
         var cases = new IndentedStringBuilder(4);
 
-        var anyRefType = false;
         for (var i = 0; i < union.TypeParameters.Count; i++)
         {
             var type = union.TypeParameters[i];
-            if (type.IsReferenceType)
-            {
-                anyRefType = true;
-            }
-            else
-            {
-                cases.AppendLine($"{i} => {ValueFieldNamePrefix}{i}{type.CallOperator}ToString()!,");
-            }
+            cases.AppendLine(type.IsReferenceType
+                                 ? $"{i} => {RefValueFieldName}?.ToString() ?? {ConstantsType}.NullString,"
+                                 : $"{i} => {ValueFieldNamePrefix}{i}{type.CallOperator}ToString()!,");
         }
 
-        if (anyRefType)
-        {
-            cases.AppendLine($"{RefTypeIndex} => {RefValueFieldName}?.ToString() ?? {ConstantsType}.NullString,");
-        }
-
-        cases.AppendLine($"_ => throw {ThrowHelperType}.ThrowUnknownTypeIndex({IndexPropertyName})");
+        cases.AppendLine($"_ => throw {ThrowHelperType}.ThrowUnknownTypeIndex({ActualTypeIndexPropertyName})");
 
         var toStringMethod = new IndentedStringBuilder(2, "public override string ToString()");
         toStringMethod.Append(" => ");
         toStringMethod.AppendLine(string.Empty);
-        toStringMethod.AppendLine($"{IndexPropertyName} switch", 1);
+        toStringMethod.AppendLine($"{ActualTypeIndexPropertyName} switch", 1);
         toStringMethod.AppendLine("{", 1);
         toStringMethod.Append(cases);
         toStringMethod.AppendLine("};", 1);
@@ -256,23 +238,12 @@ internal readonly struct UnionGenHelper(UnionToGenerate union)
     private string GenerateGetHashCode()
     {
         var cases = new IndentedStringBuilder(5);
-        var anyRefType = false;
         for (var i = 0; i < union.TypeParameters.Count; i++)
         {
             var type = union.TypeParameters[i];
-            if (type.IsReferenceType)
-            {
-                anyRefType = true;
-            }
-            else
-            {
-                cases.AppendLine($"{i} => {ValueFieldNamePrefix}{i}{type.CallOperator}GetHashCode(),");
-            }
-        }
-
-        if (anyRefType)
-        {
-            cases.AppendLine($"{RefTypeIndex} => {RefValueFieldName}?.GetHashCode(),");
+            cases.AppendLine(type.IsReferenceType
+                                 ? $"{i} => {RefValueFieldName}?.GetHashCode() ?? 0,"
+                                 : $"{i} => {ValueFieldNamePrefix}{i}{type.CallOperator}GetHashCode(),");
         }
 
         cases.AppendLine("_ => 0");
@@ -282,11 +253,11 @@ internal readonly struct UnionGenHelper(UnionToGenerate union)
         hashCodeMethod.AppendLine(string.Empty);
         hashCodeMethod.AppendLine("unchecked", 1);
         hashCodeMethod.AppendLine("{", 1);
-        hashCodeMethod.AppendLine($"var hash = {IndexPropertyName} switch", 2);
+        hashCodeMethod.AppendLine($"var hash = {ActualTypeIndexPropertyName} switch", 2);
         hashCodeMethod.AppendLine("{", 2);
         hashCodeMethod.Append(cases);
-        hashCodeMethod.AppendLine($"}}{(anyRefType ? " ?? 0" : string.Empty)};", 2);
-        hashCodeMethod.AppendLine($"return (hash * 397) ^ {IndexPropertyName};", 2);
+        hashCodeMethod.AppendLine("};", 2);
+        hashCodeMethod.AppendLine($"return (hash * 397) ^ {ActualTypeIndexPropertyName};", 2);
         hashCodeMethod.AppendLine("}", 1);
         hashCodeMethod.AppendLine("}");
 

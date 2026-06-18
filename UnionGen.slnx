@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="UnionGen.Demo/UnionGen.Demo.csproj" />
+  <Project Path="UnionGen.Generator/UnionGen.Generator.csproj" />
+  <Project Path="UnionGen.Test/UnionGen.Test.csproj" />
+  <Project Path="UnionGen/UnionGen.csproj" />
+</Solution>

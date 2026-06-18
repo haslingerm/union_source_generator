@@ -1,73 +1,129 @@
-﻿namespace UnionGen.Test;
+namespace UnionGen.Test;
 
 public sealed class UnionGeneratorSnapshotTests
 {
     [Fact]
-    public Task GeneratesUnionStructCorrectly()
+    public Task ValueTypesOnly()
     {
-        // The source code to test
-        var source = """
-                     namespace Test1;
-                     using UnionGen;
-                     
-                     [ProtoMember(1)]
-                     [UnionGen.Union<int,string>]
-                     public readonly partial struct DemoObj;
-                     """;
+        const string Source = """
+                              using UnionGen;
 
-        // Pass the source code to our helper and snapshot test the output
-        return SnapshotTestHelper.Verify(source);
+                              namespace Test;
+
+                              [Union<int, double>]
+                              public readonly partial struct IntOrDouble;
+                              """;
+
+        return SnapshotTestHelper.Verify(Source);
     }
-    
+
     [Fact]
-    public Task GeneratesUnionStructCorrectly_WithArray()
+    public Task ReferenceTypesOnly()
     {
-        // The source code to test
-        var source = """
-                     namespace Test1;
-                     using UnionGen;
+        const string Source = """
+                              using System;
+                              using UnionGen;
 
-                     [ProtoMember(1)]
-                     [Union<int,long[]>(UnionAlignment.Aligned8)]
-                     public partial struct DemoObj;
-                     """;
+                              namespace Test;
 
-        // Pass the source code to our helper and snapshot test the output
-        return SnapshotTestHelper.Verify(source);
+                              [Union<string, Exception>]
+                              public readonly partial struct StringOrException;
+                              """;
+
+        return SnapshotTestHelper.Verify(Source);
     }
-    
-    [Fact]
-    public Task GeneratesUnionStructCorrectly_NestedType()
-    {
-        // The source code to test
-        var source = """
-                     namespace Test1;
-                     using UnionGen;
-                     
-                     public interface INested
-                     {
-                         [UnionGen.Union<int, double, long>]
-                         public readonly partial struct Nested;
-                     }
-                     """;
 
-        // Pass the source code to our helper and snapshot test the output
-        return SnapshotTestHelper.Verify(source);
+    [Fact]
+    public Task MixedValueAndReferenceTypes()
+    {
+        const string Source = """
+                              using UnionGen;
+
+                              namespace Test;
+
+                              [Union<int, string>]
+                              public readonly partial struct IntOrString;
+                              """;
+
+        return SnapshotTestHelper.Verify(Source);
     }
-    
+
     [Fact]
-    public Task GeneratesUnionStructCorrectly_ByteArraySuccess()
+    public Task WithInterfaceCase()
     {
-        // The source code to test
-        var source = """
-                     namespace Test1;
-                     using UnionGen;
+        const string Source = """
+                              using System.Collections.Generic;
+                              using UnionGen;
 
-                     [UnionGen.Union<Success<byte[]>, Failure>]
-                     public readonly partial struct Nested;
-                     """;
+                              namespace Test;
 
-        // Pass the source code to our helper and snapshot test the output
-        return SnapshotTestHelper.Verify(source);
+                              [Union<IList<int>, long>]
+                              public readonly partial struct ListOrLong;
+                              """;
+
+        return SnapshotTestHelper.Verify(Source);
+    }
+
+    [Fact]
+    public Task GenericCase()
+    {
+        const string Source = """
+                              using UnionGen;
+                              using UnionGen.Types;
+
+                              namespace Test;
+
+                              [Union<Success<int>, Failure>]
+                              public readonly partial struct SuccessOrFailure;
+                              """;
+
+        return SnapshotTestHelper.Verify(Source);
+    }
+
+    [Fact]
+    public Task ArrayCase()
+    {
+        const string Source = """
+                              using UnionGen;
+
+                              namespace Test;
+
+                              [Union<int, long[]>]
+                              public readonly partial struct IntOrLongArray;
+                              """;
+
+        return SnapshotTestHelper.Verify(Source);
+    }
+
+    [Fact]
+    public Task NestedInPartialType()
+    {
+        const string Source = """
+                              using UnionGen;
+
+                              namespace Test;
+
+                              public partial interface IOuter
+                              {
+                                  [Union<int, double, long>]
+                                  public readonly partial struct Nested;
+                              }
+                              """;
+
+        return SnapshotTestHelper.Verify(Source);
+    }
+
+    [Fact]
+    public Task QualifiedAttributeName()
+    {
+        // Regression: the fully qualified attribute form must be recognised just like the short form.
+        const string Source = """
+                              namespace Test;
+
+                              [UnionGen.Union<int, string>]
+                              public readonly partial struct Qualified;
+                              """;
+
+        return SnapshotTestHelper.Verify(Source);
     }
 }

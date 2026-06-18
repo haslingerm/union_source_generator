@@ -1,4 +1,5 @@
 ﻿using System.Collections;
+using System.Text;
 
 namespace UnionGen
 {
@@ -10,6 +11,41 @@ namespace UnionGen
         ValueEqualityArray<ParentType> ParentTypes,
         ValueEqualityArray<DiagnosticHelper.Error> Errors)
     {
+        /// <summary>
+        /// Unique file hint for <c>AddSource</c>. Parent type names are included so that two
+        /// equally named unions nested in different types within the same namespace do not collide.
+        /// </summary>
+        public string HintName
+        {
+            get
+            {
+                if (ParentTypes.Count == 0)
+                {
+                    return $"{Namespace}.{Name}.g.cs";
+                }
+
+                var builder = new StringBuilder(Namespace);
+                // ParentTypes are stored innermost-first; reverse so the hint reads outermost-to-innermost.
+                foreach (var parentType in ParentTypes.Reverse())
+                {
+                    builder.Append('.').Append(parentType.Name);
+                }
+
+                builder.Append('.').Append(Name).Append(".g.cs");
+
+                return builder.ToString();
+            }
+        }
+
+        public static UnionToGenerate ForError(string name, DiagnosticHelper.Error error)
+            => ForError(name, [error]);
+
+        public static UnionToGenerate ForError(string name, IEnumerable<DiagnosticHelper.Error> errors)
+            => new(name, string.Empty, string.Empty,
+                   new(Array.Empty<TypeParameter>()),
+                   new(Array.Empty<ParentType>()),
+                   new(errors));
+
         public bool AnyReferenceType()
         {
             for (var index = 0; index < TypeParameters.Count; index++)
