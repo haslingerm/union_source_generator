@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFramework>net8.0</TargetFramework>
+        <TargetFramework>net10.0</TargetFramework>
         <Nullable>enable</Nullable>
         <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
         <RootNamespace>UnionGen</RootNamespace>
@@ -22,7 +22,7 @@
         <Description>A source generator for creating C# union types via a generic marker attribute.</Description>
         <PackageId>UnionGen</PackageId>
         <PackageReadmeFile>readme.md</PackageReadmeFile>
-        <PackageVersion>2.1.4</PackageVersion>
+        <PackageVersion>3.0.0</PackageVersion>
         <Authors>M. Haslinger</Authors>
         <PackageLicenseExpression>MIT</PackageLicenseExpression>
         <PackageTags>union;source generator</PackageTags>
