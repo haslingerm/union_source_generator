@@ -48,10 +48,15 @@ var res = simple.Match(r => r.Value * 2,
 
 var nested = new INested.Nested(42);
 
+// Equality is based on the active case *and* the wrapped value.
+SimpleObj a = new Result<int>(12);
+SimpleObj b = new Result<int>(12);
+SimpleObj c = new NotFound();
+Console.WriteLine($"a == b: {a == b}"); // True  - same case, equal value
+Console.WriteLine($"a == c: {a == c}"); // False - different case
+
 Console.WriteLine(GetOneOfType());
 
 return;
-
-SimpleObj CreateSimple() => new NotFound();
 
 Union<Result<string>, NotFound> GetOneOfType() => new Result<string>("hello");

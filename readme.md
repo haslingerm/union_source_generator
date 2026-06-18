@@ -25,9 +25,11 @@ int result = simple.Match(r => r.Value * 2,
 SimpleObj CreateSimple() => new NotFound();
 ```
 
-> While the generator itself has to be a `netstandard2.0` project, the generated code assumes C#12 / .NET 8 at this point.
+> While the generator itself has to be a `netstandard2.0` project, the generated code depends on the `UnionGen` runtime package, which targets `.NET 10` — so consuming projects need to target `.NET 10` (or later).
 
 > This project is _heavily_ influenced by the great [OneOf](https://github.com/mcintyre321/OneOf) library. All credit for the original concept to its authors!
+
+> Since version 3 this project contains AI generated code
 
 ## Opinionated Naming Scheme 
 

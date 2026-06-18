@@ -26,5 +26,8 @@ internal readonly struct DiagnosticHelper(Action<Diagnostic> reportDiagnostic)
     {
         public const int NestingNotPartial = 11;
         public const int NestingUnknownParent = 12;
+        public const int DuplicateType = 21;
+        public const int DuplicateMemberName = 22;
+        public const int GlobalNamespace = 31;
     }
 }

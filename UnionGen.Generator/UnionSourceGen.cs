@@ -1,4 +1,4 @@
-﻿using System.Collections.Immutable;
+using System.Collections.Immutable;
 using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.CodeAnalysis;
@@ -21,6 +21,14 @@ public sealed class UnionSourceGen : IIncrementalGenerator
     private static readonly string[] attributeClasses;
     private static readonly Regex nameFromFullNameRegex = new(@"^.*\.(\D[\d\D]*)$", RegexOptions.Compiled);
 
+    // Fully-qualified with a global:: prefix so the generated code can never be broken by a
+    // consumer type that collides with a namespace we reference. Special types stay as keywords
+    // (int, string, byte[]) for readability; they cannot be shadowed anyway.
+    private static readonly SymbolDisplayFormat globalQualifiedFormat =
+        SymbolDisplayFormat.FullyQualifiedFormat
+                           .WithMiscellaneousOptions(SymbolDisplayMiscellaneousOptions.UseSpecialTypes
+                                                     | SymbolDisplayMiscellaneousOptions.EscapeKeywordIdentifiers);
+
     static UnionSourceGen()
     {
         var genNamespace = typeof(UnionSourceGen).Namespace
@@ -36,9 +44,8 @@ public sealed class UnionSourceGen : IIncrementalGenerator
         {
             var unions = context.SyntaxProvider
                                 .ForAttributeWithMetadataName(attributeClass,
-                                                              static (_, _) => true,
-                                                              static (ctx, _) =>
-                                                                  GetUnionToGenerate(ctx.SemanticModel, ctx.TargetNode))
+                                                              static (node, _) => node is StructDeclarationSyntax,
+                                                              static (ctx, _) => GetUnionToGenerate(ctx))
                                 .Where(static m => m is not null);
             unionsToGenerate.Add(unions);
         }
@@ -66,7 +73,7 @@ public sealed class UnionSourceGen : IIncrementalGenerator
         {
             return;
         }
-        
+
         if (sourceData.Errors.Count > 0)
         {
             var diagHelper = new DiagnosticHelper(ctx.ReportDiagnostic);
@@ -77,73 +84,97 @@ public sealed class UnionSourceGen : IIncrementalGenerator
 
             return;
         }
-        
+
         var genHelper = new UnionGenHelper(sourceData);
         var result = genHelper.GeneratePartialStruct();
-        ctx.AddSource($"{sourceData.Namespace}.{sourceData.Name}.g.cs", SourceText.From(result, Encoding.UTF8));
+        ctx.AddSource(sourceData.HintName, SourceText.From(result, Encoding.UTF8));
     }
 
-    private static UnionToGenerate? GetUnionToGenerate(SemanticModel semanticModel, SyntaxNode syntaxNode)
+    private static UnionToGenerate? GetUnionToGenerate(GeneratorAttributeSyntaxContext ctx)
     {
-        if (syntaxNode is not StructDeclarationSyntax structSyntax)
+        if (ctx.TargetNode is not StructDeclarationSyntax structSyntax
+            || ctx.TargetSymbol is not INamedTypeSymbol structSymbol
+            || ctx.Attributes.Length == 0)
         {
             return null;
         }
 
-        GenericNameSyntax? genericName = null;
-        foreach (var attributeList in structSyntax.AttributeLists)
+        var typeArguments = ctx.Attributes[0].AttributeClass?.TypeArguments ?? ImmutableArray<ITypeSymbol>.Empty;
+        if (typeArguments.Length < MinTypeParameters)
         {
-            foreach (var attributeSyntax in attributeList.Attributes)
+            return null;
+        }
+
+        // If any type argument failed to bind, the compiler already reports CS0246 on the user's
+        // attribute usage - emitting our own diagnostic would just be noise, so we stay silent.
+        foreach (var typeArgument in typeArguments)
+        {
+            if (typeArgument.TypeKind == TypeKind.Error)
             {
-                if (attributeSyntax.Name is GenericNameSyntax { Arity: >= 2 } gName
-                    && gName.Identifier.ValueText.StartsWith("Union"))
-                {
-                    genericName = gName;
-
-                    break;
-                }
+                return null;
             }
-
-            if (genericName is not null)
-            {
-                break;
-            }
-        }
-
-        if (genericName is null)
-        {
-            return null;
-        }
-
-        var typeNames = GetTypeParameters(genericName, semanticModel);
-        if (typeNames is null)
-        {
-            return null;
         }
 
         var annotatedType = structSyntax.Identifier.Text;
-        var structSymbol = ModelExtensions.GetDeclaredSymbol(semanticModel, structSyntax);
-
-        if (structSymbol?.ContainingNamespace is null
-            || string.IsNullOrWhiteSpace(structSymbol.ContainingNamespace.Name))
+        var containingNamespace = structSymbol.ContainingNamespace;
+        if (containingNamespace is null || containingNamespace.IsGlobalNamespace)
         {
-            return null;
+            return UnionToGenerate.ForError(annotatedType,
+                                            new DiagnosticHelper.Error(DiagnosticHelper.ErrorIds.GlobalNamespace,
+                                                                       "Union types must be declared within a namespace"));
         }
 
-        var structNamespace = structSymbol.ContainingNamespace.ToDisplayString();
+        var typeNames = GetTypeParameters(typeArguments);
+        var typeErrors = ValidateTypeParameters(typeNames);
+        if (typeErrors.Count > 0)
+        {
+            return UnionToGenerate.ForError(annotatedType, typeErrors);
+        }
+
+        var structNamespace = containingNamespace.ToDisplayString();
         var structVisibility = GetVisibilityModifier(structSyntax);
-        var (parentTypes, errors) = HandleNestedTypes(structSyntax);
+        var (parentTypes, nestingErrors) = HandleNestedTypes(structSyntax);
+        if (nestingErrors.Count > 0)
+        {
+            return UnionToGenerate.ForError(annotatedType, nestingErrors);
+        }
 
         return new UnionToGenerate(annotatedType, structNamespace, structVisibility,
                                    new(typeNames),
                                    new(parentTypes),
-                                   new(errors));
+                                   new([]));
+    }
+
+    private static List<DiagnosticHelper.Error> ValidateTypeParameters(List<TypeParameter> typeParameters)
+    {
+        var errors = new List<DiagnosticHelper.Error>();
+        var seenFullNames = new HashSet<string>(StringComparer.Ordinal);
+        var seenMemberNames = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (var type in typeParameters)
+        {
+            if (!seenFullNames.Add(type.FullName))
+            {
+                errors.Add(new DiagnosticHelper.Error(DiagnosticHelper.ErrorIds.DuplicateType,
+                                                      $"The type '{type.FullName}' is used more than once; each union case must be a distinct type"));
+
+                continue;
+            }
+
+            if (!seenMemberNames.Add(type.WellKnownName))
+            {
+                errors.Add(new DiagnosticHelper.Error(DiagnosticHelper.ErrorIds.DuplicateMemberName,
+                                                      $"Multiple union cases map to the generated name '{type.WellKnownName}'; rename or wrap one of the conflicting types"));
+            }
+        }
+
+        return errors;
     }
 
     private static (List<ParentType> ParentTypes, List<DiagnosticHelper.Error> Errors) HandleNestedTypes(
         SyntaxNode structSyntax)
     {
-        if (structSyntax.Parent is NamespaceDeclarationSyntax)
+        if (structSyntax.Parent is BaseNamespaceDeclarationSyntax)
         {
             return ([], []);
         }
@@ -162,11 +193,11 @@ public sealed class UnionSourceGen : IIncrementalGenerator
                         partialFound = true;
                     }
                 }
-                
+
                 if (!partialFound)
                 {
                     return ([], [
-                        new DiagnosticHelper.Error(DiagnosticHelper.ErrorIds.NestingNotPartial, "Union type can only be nested within a partial typ")
+                        new DiagnosticHelper.Error(DiagnosticHelper.ErrorIds.NestingNotPartial, "Union type can only be nested within a partial type")
                     ]);
                 }
 
@@ -197,24 +228,19 @@ public sealed class UnionSourceGen : IIncrementalGenerator
             }
 
             currentType = currentType?.Parent;
-        } while (currentType is not null && currentType is not NamespaceDeclarationSyntax);
+        } while (currentType is not null && currentType is not BaseNamespaceDeclarationSyntax);
 
         return (parentTypes, []);
     }
 
-    private static List<TypeParameter>? GetTypeParameters(GenericNameSyntax genericName, SemanticModel semanticModel)
+    private static List<TypeParameter> GetTypeParameters(ImmutableArray<ITypeSymbol> typeArguments)
     {
-        var typeNames = new List<TypeParameter>(genericName.TypeArgumentList.Arguments.Count);
-        foreach (var argument in genericName.TypeArgumentList.Arguments)
+        var typeNames = new List<TypeParameter>(typeArguments.Length);
+        foreach (var typeSymbol in typeArguments)
         {
-            var typeSymbol = ModelExtensions.GetTypeInfo(semanticModel, argument).Type;
-            if (typeSymbol is null)
-            {
-                return null;
-            }
-
             var name = typeSymbol.Name;
             var fullName = typeSymbol.ToString();
+            var globalName = typeSymbol.ToDisplayString(globalQualifiedFormat);
             var isReferenceType = typeSymbol.IsReferenceType;
             var isInterface = typeSymbol.TypeKind == TypeKind.Interface;
             var isBuiltInType = typeSymbol.SpecialType != SpecialType.None;
@@ -225,12 +251,12 @@ public sealed class UnionSourceGen : IIncrementalGenerator
 
             if (typeSymbol is INamedTypeSymbol { IsGenericType: true } namedTypeSymbol)
             {
-                var typeArguments = namedTypeSymbol.TypeArguments;
-                switch (typeArguments.Length)
+                var typeArgs = namedTypeSymbol.TypeArguments;
+                switch (typeArgs.Length)
                 {
                     case 1:
                     {
-                        var typeParamName = GetTypeParamName(typeArguments, 0);
+                        var typeParamName = GetTypeParamName(typeArgs, 0);
                         if (typeParamName is not null)
                         {
                             name = $"{name}Of{typeParamName}";
@@ -240,13 +266,13 @@ public sealed class UnionSourceGen : IIncrementalGenerator
                     }
                     case 2:
                     {
-                        var typeParam1Name = GetTypeParamName(typeArguments, 0);
-                        var typeParam2Name = GetTypeParamName(typeArguments, 1);
+                        var typeParam1Name = GetTypeParamName(typeArgs, 0);
+                        var typeParam2Name = GetTypeParamName(typeArgs, 1);
                         if (typeParam1Name is not null && typeParam2Name is not null)
                         {
                             name = $"{name}Of{typeParam1Name}And{typeParam2Name}";
                         }
-                        
+
                         break;
                     }
                     default:
@@ -260,7 +286,7 @@ public sealed class UnionSourceGen : IIncrementalGenerator
 
             name = SanitizeName(name, fullName);
 
-            typeNames.Add(new TypeParameter(name, fullName, isReferenceType, isInterface));
+            typeNames.Add(new TypeParameter(name, fullName, globalName, isReferenceType, isInterface));
         }
 
         return typeNames;
@@ -272,7 +298,7 @@ public sealed class UnionSourceGen : IIncrementalGenerator
             {
                 return null;
             }
-            
+
             var name = namedSymbol.Name;
             var titleCaseName = name.EnsureTitleCase();
             var adjustedName = WellKnownTypes.AdjustIfWellKnown(titleCaseName);
@@ -296,7 +322,7 @@ public sealed class UnionSourceGen : IIncrementalGenerator
 
         return name;
     }
-    
+
     private static string GetVisibilityModifier(MemberDeclarationSyntax baseTypeSyntax)
     {
         for (var i = 0; i < baseTypeSyntax.Modifiers.Count; i++)
@@ -325,9 +351,10 @@ public sealed class UnionSourceGen : IIncrementalGenerator
             }
         }
 
-        // if no visibility modifier is found, it's implicitly private for classes and structs
-        return baseTypeSyntax is ClassDeclarationSyntax or StructDeclarationSyntax 
-            ? "private" 
-            : string.Empty;
+        // No explicit modifier: omit it from the generated partial as well, so the C# compiler
+        // applies the same implicit default the user's declaration gets (internal at namespace
+        // scope, private when nested). Emitting an explicit modifier here would be wrong for one
+        // of those cases (e.g. a top-level struct can never be private).
+        return string.Empty;
     }
 }

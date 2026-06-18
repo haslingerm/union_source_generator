@@ -1,5 +1,4 @@
-﻿using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp;
+using UnionGen.Test.Infrastructure;
 
 namespace UnionGen.Test;
 
@@ -7,22 +6,10 @@ public static class SnapshotTestHelper
 {
     public static Task Verify(string source)
     {
-        var syntaxTree = CSharpSyntaxTree.ParseText(source);
-        IEnumerable<PortableExecutableReference> references = new[]
-        {
-            MetadataReference.CreateFromFile(typeof(object).Assembly.Location)
-        };
-        var compilation = CSharpCompilation.Create(
-                                                   assemblyName: "Tests",
-                                                   syntaxTrees: new[] { syntaxTree },
-                                                   references: references);
-        
-        var generator = new UnionSourceGen();
-        GeneratorDriver driver = CSharpGeneratorDriver.Create(generator);
-        driver = driver.RunGenerators(compilation);
-        
+        var output = GeneratorTestHelper.Run(source);
+
         return Verifier
-            .Verify(driver)
-            .UseDirectory("Snapshots");
+               .Verify(output.Driver)
+               .UseDirectory("Snapshots");
     }
 }
